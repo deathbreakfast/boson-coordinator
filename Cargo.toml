@@ -1,0 +1,102 @@
+[package]
+name = "boson-coordinator"
+version = "0.1.0"
+edition = "2021"
+description = "Boson coordinator API: enqueue/admin trait, local runtime handle, Axum and remote HTTP backends"
+license = "MIT"
+repository = "https://github.com/unified-field-dev/boson-coordinator"
+publish = false
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+return_self_not_must_use = "allow"
+wildcard_imports = "allow"
+significant_drop_tightening = "allow"
+future_not_send = "allow"
+doc_markdown = "allow"
+use_self = "allow"
+needless_pass_by_value = "allow"
+missing_const_for_fn = "allow"
+option_if_let_else = "allow"
+too_many_lines = "allow"
+map_unwrap_or = "allow"
+redundant_closure_for_method_calls = "allow"
+single_match_else = "allow"
+match_wildcard_for_single_variants = "allow"
+items_after_statements = "allow"
+redundant_clone = "allow"
+unused_async = "allow"
+used_underscore_binding = "allow"
+uninlined_format_args = "allow"
+cast_possible_truncation = "allow"
+implicit_clone = "allow"
+trait_duplication_in_bounds = "allow"
+option_option = "allow"
+unnecessary_wraps = "allow"
+unnecessary_trailing_comma = "allow"
+elidable_lifetime_names = "allow"
+trivially_copy_pass_by_ref = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+ref_option = "allow"
+manual_let_else = "allow"
+cognitive_complexity = "allow"
+match_same_arms = "allow"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+boson-core = { git = "https://github.com/unified-field-dev/boson", tag = "v0.1.2" }
+boson-runtime = { git = "https://github.com/unified-field-dev/boson", tag = "v0.1.2", default-features = false }
+boson-axum = { git = "https://github.com/unified-field-dev/boson", tag = "v0.1.2", default-features = false, optional = true }
+axum = { version = "0.8", optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+urlencoding = { version = "2", optional = true }
+log = "0.4"
+hex = { version = "0.4", optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+
+[features]
+default = []
+axum = ["dep:axum", "dep:boson-axum"]
+# Remote HTTP client; signs with SUBSYSTEM_AUTH_HMAC_KEY when set (Soliton-compatible).
+remote-http = ["dep:reqwest", "dep:urlencoding", "dep:hex", "dep:hmac", "dep:sha2"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }
+boson-backend-mem = { git = "https://github.com/unified-field-dev/boson", tag = "v0.1.2" }
+boson-macros = { git = "https://github.com/unified-field-dev/boson", tag = "v0.1.2" }
+# No release tag on the remote yet; pin main until a v0.x tag is published.
+boson-valence-identity = { git = "https://github.com/unified-field-dev/boson-valence-identity", branch = "main" }
+quark = { package = "uf-quark", version = "0.1.1" }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[[test]]
+name = "integration_test"
+required-features = ["axum"]
+
+[[test]]
+name = "remote_http_test"
+required-features = ["remote-http"]
+
+[[example]]
+name = "axum_require_admin"
+required-features = ["axum"]
