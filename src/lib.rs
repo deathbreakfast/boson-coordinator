@@ -25,8 +25,8 @@
 //!   defaults at host boot so workers see current retry and rate-limit policy.
 //!   [Get started](#task-config-bootstrap)
 //! - **Autoscale helpers** — [`scaling::compute_target_workers`] turns queue depth into a worker
-//!   count with hysteresis; [`stats::count_queued_jobs`] feeds it ([`scaling`](scaling/index.html) /
-//!   [`stats`](stats/index.html) API reference)
+//!   count with hysteresis; [`stats::count_queued_jobs`] feeds it ([`scaling`] /
+//!   [`stats`] API reference)
 //!
 //! # Feature flags
 //!
@@ -191,8 +191,11 @@ pub mod remote_http;
 
 /// Upstream error type shared by every [`BosonCoordinatorBackend`] implementation.
 pub use boson_core::BosonError;
+/// Keyset cursors for [`BosonCoordinatorBackend::list_jobs_after`] and
+/// [`BosonCoordinatorBackend::list_runs_after`].
+pub use boson_core::{JobKey, RunKey};
 pub use coordinator_adapter::CoordinatorAdapter;
-pub use coordinator_trait::BosonCoordinatorBackend;
+pub use coordinator_trait::{BosonCoordinatorBackend, DEFAULT_KEYSET_SCAN_CAP};
 pub use default_task_config::{
     ensure_default_task_configs_embedded, ensure_default_task_configs_embedded_with_skip,
 };
