@@ -5,8 +5,8 @@ use std::future::Future;
 use async_trait::async_trait;
 
 use boson_core::{
-    page_jobs_after, page_runs_after, Job, JobKey, JobStatus, Result, Run, RunKey, TaskConfig,
-    TaskRunStats,
+    page_jobs_after, page_runs_after, BosonError, Job, JobFilter, JobKey, JobStatus, Result, Run,
+    RunFilter, RunKey, TaskConfig, TaskRunStats,
 };
 use boson_runtime::{Boson, TaskRegistry};
 
@@ -41,6 +41,13 @@ where
     }
     all.truncate(DEFAULT_KEYSET_SCAN_CAP);
     all
+}
+
+/// Error the default bodies of the optional admin methods return.
+fn unsupported(method: &str) -> BosonError {
+    BosonError::backend(format!(
+        "{method} is not supported by this coordinator backend"
+    ))
 }
 
 /// Backend for Boson administration and enqueue.
@@ -96,39 +103,81 @@ pub trait BosonCoordinatorBackend: Send + Sync {
         limit: usize,
     ) -> Vec<Job>;
 
-    /// List up to `limit` jobs that sort strictly after `after`, oldest first.
+    /// List up to `limit` jobs matching `filter` that sort strictly after `after`, oldest first.
     ///
     /// Order is `created_at ASC, job_id ASC`. A job comes after the key when its `created_at` is
     /// later than `after.created_at`, or equal with a greater `job_id`, so two jobs created in the
     /// same instant still page in a fixed order. `after: None` starts at the oldest job.
-    /// `status_filter` narrows the scan to one status.
+    /// `filter` narrows the scan by status set, task, pool, creation time or id suffix; the
+    /// default [`JobFilter`] matches every job except dropped ones.
     ///
     /// To page, pass `JobKey::from(last)` for the last job of each non-empty page; an empty page
     /// means the scan is done. Each job appears once across the pages, with no `OFFSET` drift when
     /// jobs are enqueued mid-scan: a new job's `created_at` is the enqueue time, so it sorts after
     /// every key already returned and shows up at the end of the scan. A job whose status changes
-    /// mid-scan keeps its position; with a `status_filter`, it shows up only if it matches when
+    /// mid-scan keeps its position; with a status filter, it shows up only if it matches when
     /// its page is read. See [`boson_core::QueueBackend::list_jobs_after`] for engine-specific
     /// `job_id` ordering.
     ///
     /// Backend errors yield an empty page, like [`Self::list_jobs`].
     ///
-    /// The default body reads matching jobs through [`Self::list_jobs`] in chunks, up to
-    /// [`DEFAULT_KEYSET_SCAN_CAP`] rows, and pages them with [`page_jobs_after`]. It is O(n) per
+    /// The default body reads jobs through [`Self::list_jobs`] in chunks, up to
+    /// [`DEFAULT_KEYSET_SCAN_CAP`] rows, and filters and pages them with [`page_jobs_after`]. It
+    /// narrows the offset read to a status only when `filter` names exactly one. It is O(n) per
     /// page, silently omits rows past the cap, and inherits offset drift between its own chunks.
     /// Implementations backed by an ordered store should override it.
     async fn list_jobs_after(
         &self,
-        status_filter: Option<JobStatus>,
+        filter: &JobFilter,
         after: Option<&JobKey>,
         limit: usize,
     ) -> Vec<Job> {
         if limit == 0 {
             return Vec::new();
         }
-        let all =
-            scan_offset_pages(|offset, chunk| self.list_jobs(status_filter, offset, chunk)).await;
-        page_jobs_after(all, status_filter, after, limit)
+        let status = match filter.statuses.as_slice() {
+            [one] => Some(*one),
+            _ => None,
+        };
+        let all = scan_offset_pages(|offset, chunk| self.list_jobs(status, offset, chunk)).await;
+        page_jobs_after(all, filter, after, limit)
+    }
+
+    /// Count the jobs matching `filter`, with the same rules as [`Self::list_jobs_after`].
+    ///
+    /// The default body returns an unsupported error; backends that can count without a capped
+    /// scan override it.
+    async fn count_jobs_matching(&self, filter: &JobFilter) -> Result<u64> {
+        let _ = filter;
+        Err(unsupported("count_jobs_matching"))
+    }
+
+    /// Retry a failed job as a new job enqueued by `actor_json`, returning the new job id.
+    ///
+    /// Pass the session actor, never one built from the request. The new job records the
+    /// original in `retried_from`. The default body returns an unsupported error.
+    ///
+    /// # Errors
+    ///
+    /// The adapter returns [`BosonError::JobNotFound`] for an unknown id,
+    /// [`BosonError::InvalidConfig`] when the job is not `failed`, and actor policy or rate-limit
+    /// errors from the runtime.
+    async fn retry_job(&self, job_id: &str, actor_json: serde_json::Value) -> Result<String> {
+        let _ = (job_id, actor_json);
+        Err(unsupported("retry_job"))
+    }
+
+    /// Mark a failed job dropped, so the default filters leave it out of lists and counts.
+    ///
+    /// The default body returns an unsupported error.
+    ///
+    /// # Errors
+    ///
+    /// The adapter returns [`BosonError::JobNotFound`] for an unknown id and
+    /// [`BosonError::InvalidConfig`] when the job is not `failed`.
+    async fn drop_failed_job(&self, job_id: &str) -> Result<()> {
+        let _ = job_id;
+        Err(unsupported("drop_failed_job"))
     }
 
     /// Cancel a job if still active.
@@ -144,12 +193,12 @@ pub trait BosonCoordinatorBackend: Send + Sync {
     async fn list_runs(&self, job_id_filter: Option<&str>, offset: usize, limit: usize)
         -> Vec<Run>;
 
-    /// List up to `limit` runs that sort strictly after `after`, newest first.
+    /// List up to `limit` runs matching `filter` that sort strictly after `after`, newest first.
     ///
     /// Order is `started_at DESC, run_id DESC`. A run comes after the key when its `started_at` is
     /// earlier than `after.started_at`, or equal with a smaller `run_id`, so two runs started in
     /// the same instant still page in a fixed order. `after: None` starts at the newest run.
-    /// `job_id_filter` narrows the scan to one job's runs.
+    /// `filter` narrows the scan by status set, task, job id, start time or id suffix.
     ///
     /// To page, pass `RunKey::from(last)` for the last run of each non-empty page; an empty page
     /// means the scan is done. Each run appears once across the pages. A run that starts mid-scan
@@ -159,22 +208,32 @@ pub trait BosonCoordinatorBackend: Send + Sync {
     ///
     /// Backend errors yield an empty page, like [`Self::list_runs`].
     ///
-    /// The default body reads matching runs through [`Self::list_runs`] in chunks, up to
-    /// [`DEFAULT_KEYSET_SCAN_CAP`] rows, and pages them with [`page_runs_after`]. It is O(n) per
-    /// page, silently omits rows past the cap, and inherits offset drift between its own chunks.
-    /// Implementations backed by an ordered store should override it.
+    /// The default body reads runs through [`Self::list_runs`] (narrowed to `filter.job_id`) in
+    /// chunks, up to [`DEFAULT_KEYSET_SCAN_CAP`] rows, and filters and pages them with
+    /// [`page_runs_after`]. It is O(n) per page, silently omits rows past the cap, and inherits
+    /// offset drift between its own chunks. Implementations backed by an ordered store should
+    /// override it.
     async fn list_runs_after(
         &self,
-        job_id_filter: Option<&str>,
+        filter: &RunFilter,
         after: Option<&RunKey>,
         limit: usize,
     ) -> Vec<Run> {
         if limit == 0 {
             return Vec::new();
         }
-        let all =
-            scan_offset_pages(|offset, chunk| self.list_runs(job_id_filter, offset, chunk)).await;
-        page_runs_after(all, job_id_filter, after, limit)
+        let job_id = filter.job_id.as_deref();
+        let all = scan_offset_pages(|offset, chunk| self.list_runs(job_id, offset, chunk)).await;
+        page_runs_after(all, filter, after, limit)
+    }
+
+    /// Count the runs matching `filter`, with the same rules as [`Self::list_runs_after`].
+    ///
+    /// The default body returns an unsupported error; backends that can count without a capped
+    /// scan override it.
+    async fn count_runs_matching(&self, filter: &RunFilter) -> Result<u64> {
+        let _ = filter;
+        Err(unsupported("count_runs_matching"))
     }
 
     /// Load one run.

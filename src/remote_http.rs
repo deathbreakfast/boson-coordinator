@@ -34,7 +34,7 @@ use crate::remote_api_types::{
     UpdateTaskConfigRequest,
 };
 use boson_core::{BosonError, Result};
-use boson_core::{Job, JobStatus, Run, RunStatus, TaskConfig, TaskRunStats};
+use boson_core::{Job, JobFilter, JobStatus, Run, RunFilter, RunStatus, TaskConfig, TaskRunStats};
 use boson_runtime::TaskRegistry;
 
 const DEFAULT_REMOTE_TIMEOUT_MS: u64 = 3000;
@@ -237,6 +237,11 @@ impl HttpRemoteBosonCoordinatorBackend {
     }
 }
 
+/// Error for coordinator methods the remote HTTP API has no route for.
+fn unsupported_remote(method: &str) -> BosonError {
+    BosonError::backend(format!("{method} is not supported on remote coordinators"))
+}
+
 fn job_status_from_str(s: &str) -> JobStatus {
     match s.to_ascii_lowercase().as_str() {
         "queued" => JobStatus::Queued,
@@ -263,6 +268,9 @@ fn job_from_response(j: JobResponse) -> Job {
             .unwrap_or_else(|_| Utc::now()),
         signature_hash: 0,
         attempt: 1,
+        // The remote job response carries neither yet.
+        retried_from: None,
+        dropped_at: None,
     }
 }
 
@@ -511,6 +519,24 @@ impl BosonCoordinatorBackend for HttpRemoteBosonCoordinatorBackend {
             runs_total,
             success_count,
         }
+    }
+
+    /// No HTTP count route yet; a capped list scan would report a wrong total.
+    async fn count_jobs_matching(&self, _filter: &JobFilter) -> Result<u64> {
+        Err(unsupported_remote("count_jobs_matching"))
+    }
+
+    /// No HTTP count route yet; a capped list scan would report a wrong total.
+    async fn count_runs_matching(&self, _filter: &RunFilter) -> Result<u64> {
+        Err(unsupported_remote("count_runs_matching"))
+    }
+
+    async fn retry_job(&self, _job_id: &str, _actor_json: serde_json::Value) -> Result<String> {
+        Err(unsupported_remote("retry_job"))
+    }
+
+    async fn drop_failed_job(&self, _job_id: &str) -> Result<()> {
+        Err(unsupported_remote("drop_failed_job"))
     }
 }
 

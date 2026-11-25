@@ -191,9 +191,9 @@ pub mod remote_http;
 
 /// Upstream error type shared by every [`BosonCoordinatorBackend`] implementation.
 pub use boson_core::BosonError;
-/// Keyset cursors for [`BosonCoordinatorBackend::list_jobs_after`] and
-/// [`BosonCoordinatorBackend::list_runs_after`].
-pub use boson_core::{JobKey, RunKey};
+/// Keyset cursors and filters for [`BosonCoordinatorBackend::list_jobs_after`] and
+/// [`BosonCoordinatorBackend::list_runs_after`] (filters also drive the `count_*_matching` methods).
+pub use boson_core::{JobFilter, JobKey, RunFilter, RunKey};
 pub use coordinator_adapter::CoordinatorAdapter;
 pub use coordinator_trait::{BosonCoordinatorBackend, DEFAULT_KEYSET_SCAN_CAP};
 pub use default_task_config::{

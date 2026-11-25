@@ -138,7 +138,7 @@ dependencies = [
 [[package]]
 name = "boson-axum"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "axum",
  "boson-core",
@@ -153,7 +153,7 @@ dependencies = [
 [[package]]
 name = "boson-backend-mem"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "async-trait",
  "boson-core",
@@ -190,7 +190,7 @@ dependencies = [
 [[package]]
 name = "boson-core"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "async-trait",
  "chrono",
@@ -203,7 +203,7 @@ dependencies = [
 [[package]]
 name = "boson-macros"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -213,7 +213,7 @@ dependencies = [
 [[package]]
 name = "boson-runtime"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "async-trait",
  "boson-core",
@@ -227,7 +227,7 @@ dependencies = [
 [[package]]
 name = "boson-telemetry"
 version = "0.1.4"
-source = "git+https://github.com/unified-field-dev/boson?branch=main#8febfbdaf6d17efffe0eb6e7b54dab044e999325"
+source = "git+https://github.com/deathbreakfast/boson?branch=main#2fdf8d8c831cd6950524596d2a2921866179b0b8"
 dependencies = [
  "serde_json",
 ]
@@ -371,7 +371,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -952,7 +952,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
