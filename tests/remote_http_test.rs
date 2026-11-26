@@ -11,7 +11,7 @@ use boson_coordinator::remote_http::{
     build_remote_coordinator, resolve_boson_remote_base_url, subsystem_hmac_header_pair,
     HttpRemoteBosonCoordinatorBackend, SUBSYSTEM_AUTH_HEADER_NAME, SUBSYSTEM_HMAC_KEY_ENV,
 };
-use boson_coordinator::BosonCoordinatorBackend;
+use boson_coordinator::{BosonCoordinatorBackend, JobFilter, RunFilter};
 use boson_core::BosonError;
 use boson_runtime::TaskRegistry;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -302,4 +302,36 @@ async fn remote_get_attaches_subsystem_hmac_header() {
     let got = seen.lock().expect("lock").clone();
     restore_env(SUBSYSTEM_HMAC_KEY_ENV, prev);
     assert_eq!(got.as_deref(), Some(expected.1.as_str()));
+}
+
+#[tokio::test]
+async fn remote_admin_methods_are_unsupported() {
+    // No server needed: these methods never reach the network.
+    let backend = remote_backend("http://127.0.0.1:9".into());
+    let errors = [
+        backend
+            .count_jobs_matching(&JobFilter::default())
+            .await
+            .unwrap_err(),
+        backend
+            .count_runs_matching(&RunFilter::default())
+            .await
+            .unwrap_err(),
+        backend
+            .retry_job("job-1", serde_json::json!({}))
+            .await
+            .unwrap_err(),
+        backend.drop_failed_job("job-1").await.unwrap_err(),
+    ];
+    for (err, method) in errors.iter().zip([
+        "count_jobs_matching",
+        "count_runs_matching",
+        "retry_job",
+        "drop_failed_job",
+    ]) {
+        assert_eq!(
+            err.backend_message(),
+            Some(format!("{method} is not supported on remote coordinators").as_str())
+        );
+    }
 }

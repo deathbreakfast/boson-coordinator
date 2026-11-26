@@ -98,3 +98,11 @@ required-features = ["remote-http"]
 [[example]]
 name = "axum_require_admin"
 required-features = ["axum"]
+
+# Temporary: filtered keyset paging, counts, retry and drop are on the fork's boson main ahead of uf-dev.
+[patch."https://github.com/unified-field-dev/boson"]
+boson-core = { git = "https://github.com/deathbreakfast/boson", branch = "main" }
+boson-runtime = { git = "https://github.com/deathbreakfast/boson", branch = "main" }
+boson-axum = { git = "https://github.com/deathbreakfast/boson", branch = "main" }
+boson-macros = { git = "https://github.com/deathbreakfast/boson", branch = "main" }
+boson-backend-mem = { git = "https://github.com/deathbreakfast/boson", branch = "main" }

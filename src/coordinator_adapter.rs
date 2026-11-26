@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use boson_core::{Job, JobKey, JobStatus, Result, Run, RunKey, TaskConfig, TaskRunStats};
+use boson_core::{
+    EnqueueTrust, Job, JobFilter, JobKey, JobStatus, Result, Run, RunFilter, RunKey, TaskConfig,
+    TaskRunStats,
+};
 use boson_runtime::Boson;
 
 use crate::BosonCoordinatorBackend;
@@ -70,14 +73,30 @@ impl BosonCoordinatorBackend for CoordinatorAdapter {
 
     async fn list_jobs_after(
         &self,
-        status_filter: Option<JobStatus>,
+        filter: &JobFilter,
         after: Option<&JobKey>,
         limit: usize,
     ) -> Vec<Job> {
         self.inner
-            .list_jobs_after(status_filter, after, limit)
+            .list_jobs_after(filter, after, limit)
             .await
             .unwrap_or_default()
+    }
+
+    async fn count_jobs_matching(&self, filter: &JobFilter) -> Result<u64> {
+        self.inner.queue_backend().count_jobs_matching(filter).await
+    }
+
+    /// Retries through [`Boson::retry_job`] with [`EnqueueTrust::External`], so the runtime's
+    /// actor policy checks `actor_json` as it does for HTTP enqueue.
+    async fn retry_job(&self, job_id: &str, actor_json: serde_json::Value) -> Result<String> {
+        self.inner
+            .retry_job(job_id, actor_json, EnqueueTrust::External)
+            .await
+    }
+
+    async fn drop_failed_job(&self, job_id: &str) -> Result<()> {
+        self.inner.queue_backend().drop_failed_job(job_id).await
     }
 
     async fn cancel_job(&self, job_id: &str) -> Result<()> {
@@ -106,14 +125,18 @@ impl BosonCoordinatorBackend for CoordinatorAdapter {
 
     async fn list_runs_after(
         &self,
-        job_id_filter: Option<&str>,
+        filter: &RunFilter,
         after: Option<&RunKey>,
         limit: usize,
     ) -> Vec<Run> {
         self.inner
-            .list_runs_after(job_id_filter, after, limit)
+            .list_runs_after(filter, after, limit)
             .await
             .unwrap_or_default()
+    }
+
+    async fn count_runs_matching(&self, filter: &RunFilter) -> Result<u64> {
+        self.inner.queue_backend().count_runs_matching(filter).await
     }
 
     async fn get_run(&self, run_id: &str) -> Option<Run> {

@@ -1,7 +1,9 @@
 [advisories]
 version = 2
 yanked = "warn"
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no fixed release; temporary until the fleet moves to jiff or time (security:RUSTSEC-2026-0543)" },
+]
 
 [licenses]
 version = 2
@@ -38,6 +40,8 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-git = [
     "https://github.com/unified-field-dev/boson",
+    # Temporary: boson main on the fork, until it reaches unified-field-dev.
+    "https://github.com/deathbreakfast/boson",
     "https://github.com/unified-field-dev/boson-valence-identity",
     "https://github.com/unified-field-dev/quark",
     "https://github.com/unified-field-dev/soliton",

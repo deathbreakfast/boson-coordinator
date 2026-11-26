@@ -12,7 +12,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use boson_backend_mem::MemQueueBackend;
 use boson_coordinator::{
-    BosonCoordinatorBackend, CoordinatorAdapter, JobKey, RunKey, DEFAULT_KEYSET_SCAN_CAP,
+    BosonCoordinatorBackend, CoordinatorAdapter, JobFilter, JobKey, RunFilter, RunKey,
+    DEFAULT_KEYSET_SCAN_CAP,
 };
 use boson_core::{
     BosonError, ExecutionContext, Job, JobStatus, JsonExecutionContextFactory, Run, TaskConfig,
@@ -82,11 +83,14 @@ where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
+    let filter = status.map(JobFilter::status).unwrap_or_default();
     let mut seen = Vec::new();
     let mut cursor: Option<JobKey> = None;
     let mut pages = 0_u32;
     loop {
-        let page = backend.list_jobs_after(status, cursor.as_ref(), PAGE).await;
+        let page = backend
+            .list_jobs_after(&filter, cursor.as_ref(), PAGE)
+            .await;
         assert!(page.len() <= PAGE);
         let Some(last) = page.last() else { break };
         cursor = Some(JobKey::from(last));
@@ -169,7 +173,10 @@ async fn adapter_list_jobs_after_returns_mid_scan_enqueues_once_at_end() {
 async fn adapter_list_jobs_after_zero_limit_is_empty() {
     let (_boson, backend) = mem_adapter();
     enqueue_n(backend.as_ref(), 3).await;
-    assert!(backend.list_jobs_after(None, None, 0).await.is_empty());
+    assert!(backend
+        .list_jobs_after(&JobFilter::default(), None, 0)
+        .await
+        .is_empty());
 }
 
 fn base() -> DateTime<Utc> {
@@ -194,10 +201,13 @@ fn fixture_runs(n: usize) -> Vec<Run> {
 }
 
 async fn scan_runs(backend: &dyn BosonCoordinatorBackend, job: Option<&str>) -> Vec<Run> {
+    let filter = job.map(RunFilter::job).unwrap_or_default();
     let mut seen = Vec::new();
     let mut cursor: Option<RunKey> = None;
     loop {
-        let page = backend.list_runs_after(job, cursor.as_ref(), PAGE).await;
+        let page = backend
+            .list_runs_after(&filter, cursor.as_ref(), PAGE)
+            .await;
         assert!(page.len() <= PAGE);
         let Some(last) = page.last() else { break };
         cursor = Some(RunKey::from(last));
@@ -237,7 +247,10 @@ async fn adapter_list_runs_after_pages_newest_first() {
             "filter {job:?}"
         );
     }
-    assert!(backend.list_runs_after(None, None, 0).await.is_empty());
+    assert!(backend
+        .list_runs_after(&RunFilter::default(), None, 0)
+        .await
+        .is_empty());
 }
 
 /// Implements only the offset reads; keyset reads come from the trait's default bodies.
@@ -381,7 +394,10 @@ async fn default_list_jobs_after_pages_offset_only_backend() {
         .filter(|j| j.status == JobStatus::Success)
         .count();
     assert_eq!(success.len(), expected);
-    assert!(backend.list_jobs_after(None, None, 0).await.is_empty());
+    assert!(backend
+        .list_jobs_after(&JobFilter::default(), None, 0)
+        .await
+        .is_empty());
 }
 
 #[tokio::test]
@@ -391,15 +407,60 @@ async fn default_list_runs_after_pages_offset_only_backend() {
         let got = scan_runs(&backend, job).await;
         assert_eq!(run_ids(&got), expected_run_ids(&backend.runs, job));
     }
-    assert!(backend.list_runs_after(None, None, 0).await.is_empty());
+    assert!(backend
+        .list_runs_after(&RunFilter::default(), None, 0)
+        .await
+        .is_empty());
 }
 
 #[tokio::test]
 async fn default_list_jobs_after_stops_at_scan_cap() {
     let backend = OffsetOnlyBackend::new(DEFAULT_KEYSET_SCAN_CAP + 50, 0);
     let page = backend
-        .list_jobs_after(None, None, DEFAULT_KEYSET_SCAN_CAP + 50)
+        .list_jobs_after(&JobFilter::default(), None, DEFAULT_KEYSET_SCAN_CAP + 50)
         .await;
     assert_eq!(page.len(), DEFAULT_KEYSET_SCAN_CAP);
     assert_jobs_ordered(&page);
+}
+
+#[tokio::test]
+async fn default_list_jobs_after_applies_multi_status_filter() {
+    let backend = OffsetOnlyBackend::new(300, 0);
+    let filter = JobFilter {
+        statuses: vec![JobStatus::Queued, JobStatus::Success],
+        ..JobFilter::default()
+    };
+    let page = backend.list_jobs_after(&filter, None, 1_000).await;
+    assert_jobs_ordered(&page);
+    let expected = backend.jobs.iter().filter(|j| filter.matches(j)).count();
+    assert_eq!(page.len(), expected);
+    assert!(page.iter().all(|j| j.status != JobStatus::Running));
+}
+
+#[tokio::test]
+async fn default_admin_methods_report_unsupported() {
+    let backend = OffsetOnlyBackend::new(0, 0);
+    let errors = [
+        backend
+            .count_jobs_matching(&JobFilter::default())
+            .await
+            .unwrap_err(),
+        backend
+            .count_runs_matching(&RunFilter::default())
+            .await
+            .unwrap_err(),
+        backend.retry_job("job-1", json!({})).await.unwrap_err(),
+        backend.drop_failed_job("job-1").await.unwrap_err(),
+    ];
+    for (err, method) in errors.iter().zip([
+        "count_jobs_matching",
+        "count_runs_matching",
+        "retry_job",
+        "drop_failed_job",
+    ]) {
+        assert_eq!(
+            err.backend_message(),
+            Some(format!("{method} is not supported by this coordinator backend").as_str())
+        );
+    }
 }
